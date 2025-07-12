@@ -1,37 +1,27 @@
-from flask import Flask, render_template, request, jsonify
-import os
+from flask import Flask, request, jsonify, render_template
 import openai
+from flask_cors import CORS
 import base64
+import os
 
 app = Flask(__name__)
-
-# Configurations
-app.config['UPLOAD_FOLDER'] = 'uploads/'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Limit upload size to 16 MB
-
-# Ensure the upload folder exists
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
+CORS(app)
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+@app.route("/")
+def home():
+    return render_template("index.html")
 
-@app.route('/procesar', methods=['POST'])
+@app.route("/procesar", methods=["POST"])
 def procesar():
-    if 'imagen' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
+    try:
+        if 'imagen' not in request.files:
+            return jsonify({"error": "No se recibió ninguna imagen."}), 400
 
-    file = request.files['imagen']
-
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-
-    if file:
-        imagen_bytes = file.read()
+        imagen = request.files['imagen']
+        imagen_bytes = imagen.read()
         imagen_b64 = base64.b64encode(imagen_bytes).decode("utf-8")
 
         prompt = """
@@ -39,6 +29,7 @@ Eres un experto en pruebas de admisión de la UTC, enfocado en razonamiento num�
 Observa la imagen, extrae el texto del ejercicio y responde únicamente con la opción correcta o la respuesta final, sin mostrar el procedimiento ni explicaciones.
         """
 
+        # Usa el modelo actualizado gpt-4o
         ia_response = openai.OpenAI(api_key=OPENAI_API_KEY).chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -57,9 +48,11 @@ Observa la imagen, extrae el texto del ejercicio y responde únicamente con la o
             ],
             max_tokens=1024
         )
-        resultado = ia_response.choices[0].message.content.strip()
+        respuesta_ia = ia_response.choices[0].message.content
 
-        return jsonify({'resultado': resultado})
+        return jsonify({"resultado": respuesta_ia})
+    except Exception as e:
+        return jsonify({'error': f'Error: {str(e)}'}), 500
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
